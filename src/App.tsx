@@ -188,7 +188,6 @@ function App() {
           <a href="#method">Method</a>
         </nav>
         <div className="header-meta">
-          <span>FOR GARRY TRAN</span>
           <a
             className="github-link"
             href="https://github.com/krishnatheaverage/spec-to-part"
