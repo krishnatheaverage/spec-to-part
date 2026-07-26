@@ -4,6 +4,8 @@ An in-browser, AI-native CAD production demo. Describe a simple mechanical part 
 
 The GitHub Pages build runs entirely in the browser, with no API keys or backend required.
 
+**Live demo:** https://krishnatheaverage.github.io/spec-to-part/
+
 ## Local development
 
 ```bash

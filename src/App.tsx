@@ -172,7 +172,7 @@ function App() {
           <span>FOR GARRY TRAN</span>
           <a
             className="github-link"
-            href="https://github.com/"
+            href="https://github.com/krishnatheaverage/spec-to-part"
             target="_blank"
             rel="noreferrer"
             aria-label="View project on GitHub"
