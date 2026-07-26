@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import {
   ArrowDown,
   ArrowUpRight,
+  AlertTriangle,
   Box,
   Braces,
   Check,
@@ -19,7 +20,14 @@ import {
   WandSparkles,
 } from 'lucide-react'
 import { STLExporter } from 'three/addons/exporters/STLExporter.js'
-import { buildCadQueryScript, buildManufacturingSummary, createPartGroup, generatePart, presets } from './cad'
+import {
+  buildCadQueryScript,
+  buildManufacturingSummary,
+  createPartGroup,
+  generatePart,
+  parseSpecification,
+  presets,
+} from './cad'
 import { PartViewer } from './components/PartViewer'
 import { exportStep } from './step-export'
 import type { GeneratedPart, PartParameters } from './types'
@@ -87,8 +95,10 @@ function App() {
   const [generationStep, setGenerationStep] = useState(0)
   const [codeOpen, setCodeOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [inputError, setInputError] = useState('')
 
   const generationStages = ['Parse constraints', 'Build solid', 'Run DFM checks']
+  const draftParse = useMemo(() => parseSpecification(spec), [spec])
   const partName = useMemo(
     () => `${generated.params.kind}-${generated.params.width}x${generated.params.height}`,
     [generated.params],
@@ -96,6 +106,13 @@ function App() {
 
   const runGeneration = async () => {
     if (!spec.trim() || generating) return
+    if (draftParse.usedDefaultEnvelope) {
+      setInputError(
+        'Add an envelope such as “120 × 80 × 2 mm” or “width 120 mm, depth 80 mm, thickness 2 mm.”',
+      )
+      return
+    }
+    setInputError('')
     setGenerating(true)
     setGenerationStep(0)
     await wait(360)
@@ -113,6 +130,8 @@ function App() {
     if (!preset) return
     setSpec(preset.spec)
     setActivePreset(id)
+    setInputError('')
+    setGenerated(generatePart(preset.spec))
   }
 
   const updateParameter = (key: keyof PartParameters, value: number) => {
@@ -244,11 +263,38 @@ function App() {
                 onChange={(event) => {
                   setSpec(event.target.value)
                   setActivePreset('')
+                  setInputError('')
                 }}
+                aria-invalid={Boolean(inputError)}
                 spellCheck={false}
               />
               <small>{spec.length} CHAR / SIMPLE PARTS ONLY</small>
             </label>
+
+            <div
+              className={`parse-feedback ${
+                inputError || draftParse.usedDefaultEnvelope ? 'needs-input' : 'ready'
+              }`}
+            >
+              {inputError || draftParse.usedDefaultEnvelope ? (
+                <AlertTriangle size={15} />
+              ) : (
+                <CheckCircle2 size={15} />
+              )}
+              <div>
+                <strong>
+                  {inputError || draftParse.usedDefaultEnvelope
+                    ? 'DIMENSIONS REQUIRED'
+                    : 'ENVELOPE RECOGNIZED'}
+                </strong>
+                <span>
+                  {inputError ||
+                    (draftParse.usedDefaultEnvelope
+                      ? 'Use width × depth × thickness, in millimeters.'
+                      : `${draftParse.params.width} W × ${draftParse.params.height} D × ${draftParse.params.thickness} T mm`)}
+                </span>
+              </div>
+            </div>
 
             <button
               type="button"
@@ -287,7 +333,7 @@ function App() {
               <div className="assumptions">
                 <Sparkles size={15} />
                 <div>
-                  <strong>{generated.assumptions.length} smart assumptions</strong>
+                  <strong>{generated.assumptions.length} parser notes</strong>
                   <p>{generated.assumptions[0]}</p>
                 </div>
               </div>
@@ -313,7 +359,7 @@ function App() {
                 onChange={(value) => updateParameter('width', value)}
               />
               <DimensionControl
-                label="HEIGHT"
+                label="DEPTH"
                 value={generated.params.height}
                 min={20}
                 max={150}

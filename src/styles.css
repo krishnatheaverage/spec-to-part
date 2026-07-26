@@ -449,6 +449,10 @@ footer {
   border-color: var(--ink);
 }
 
+.spec-input textarea[aria-invalid='true'] {
+  border-color: var(--orange);
+}
+
 .spec-input > small {
   position: absolute;
   right: 14px;
@@ -457,6 +461,63 @@ footer {
   font-family: 'DM Mono', monospace;
   font-size: 7px;
   letter-spacing: 0.08em;
+}
+
+.parse-feedback {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  margin-top: 12px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+}
+
+.parse-feedback svg {
+  margin-top: 1px;
+}
+
+.parse-feedback div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.parse-feedback strong,
+.parse-feedback span {
+  font-family: 'DM Mono', monospace;
+  line-height: 1.35;
+}
+
+.parse-feedback strong {
+  font-size: 7px;
+  letter-spacing: 0.09em;
+}
+
+.parse-feedback span {
+  color: #64655e;
+  font-size: 8px;
+}
+
+.parse-feedback.ready {
+  background: rgba(96, 203, 108, 0.06);
+  border-color: rgba(75, 145, 80, 0.42);
+}
+
+.parse-feedback.ready svg,
+.parse-feedback.ready strong {
+  color: #398546;
+}
+
+.parse-feedback.needs-input {
+  background: rgba(241, 91, 54, 0.06);
+  border-color: rgba(241, 91, 54, 0.55);
+}
+
+.parse-feedback.needs-input svg,
+.parse-feedback.needs-input strong {
+  color: #c64728;
 }
 
 .generate-button {

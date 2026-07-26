@@ -32,6 +32,7 @@ export interface ManufacturingSummary {
 export interface GeneratedPart {
   params: PartParameters
   assumptions: string[]
+  usedDefaultEnvelope: boolean
   script: string
   summary: ManufacturingSummary
 }

@@ -49,20 +49,50 @@ const clamp = (value: number, min: number, max: number) =>
 export function parseSpecification(spec: string): {
   params: PartParameters
   assumptions: string[]
+  usedDefaultEnvelope: boolean
 } {
   const normalized = spec.toLowerCase().replaceAll('×', 'x').replaceAll('ø', ' diameter ')
   const assumptions: string[] = []
   const dimensions = normalized.match(
-    /(\d+(?:\.\d+)?)\s*(?:mm)?\s*x\s*(\d+(?:\.\d+)?)\s*(?:mm)?\s*x\s*(\d+(?:\.\d+)?)\s*mm/,
+    /(\d+(?:\.\d+)?)\s*(?:mm)?\s*x\s*(\d+(?:\.\d+)?)\s*(?:mm)?\s*x\s*(\d+(?:\.\d+)?)\s*(?:mm)?/,
   )
 
-  if (!dimensions) {
+  const labeledValue = (labels: string[], suffixes: string[] = []) => {
+    const labelPattern = labels.join('|')
+    const suffixPattern = suffixes.join('|')
+    const before = normalized.match(
+      new RegExp(`(?:${labelPattern})\\s*(?:of|=|:|is)?\\s*(\\d+(?:\\.\\d+)?)\\s*(?:mm)?\\b`),
+    )
+    if (before) return Number.parseFloat(before[1])
+    if (suffixPattern) {
+      const after = normalized.match(
+        new RegExp(`(\\d+(?:\\.\\d+)?)\\s*(?:mm)?\\s*(?:${suffixPattern})\\b`),
+      )
+      if (after) return Number.parseFloat(after[1])
+    }
+    return undefined
+  }
+
+  const labeledWidth = labeledValue(['width', 'length'], ['wide', 'long', 'width'])
+  const labeledDepth = labeledValue(['base depth', 'depth'], ['deep', 'depth'])
+  const labeledHeight = labeledValue(['height'], ['high', 'height'])
+  const labeledThickness = labeledValue(['thickness'], ['thick', 'thickness'])
+  const hasLabeledEnvelope =
+    labeledWidth !== undefined &&
+    (labeledDepth !== undefined || labeledHeight !== undefined) &&
+    labeledThickness !== undefined
+  const usedDefaultEnvelope = !dimensions && !hasLabeledEnvelope
+
+  if (usedDefaultEnvelope) {
     assumptions.push('Envelope defaulted to 80 × 40 × 3 mm.')
   }
 
-  const width = numberFrom(dimensions?.[1], defaults.width)
-  const height = numberFrom(dimensions?.[2], defaults.height)
-  const thickness = numberFrom(dimensions?.[3], defaults.thickness)
+  const width = numberFrom(dimensions?.[1], labeledWidth ?? defaults.width)
+  const height = numberFrom(
+    dimensions?.[2],
+    labeledDepth ?? labeledHeight ?? defaults.height,
+  )
+  const thickness = numberFrom(dimensions?.[3], labeledThickness ?? defaults.thickness)
 
   const material = normalized.includes('steel')
     ? normalized.includes('stainless')
@@ -86,19 +116,29 @@ export function parseSpecification(spec: string): {
     assumptions.push('Material assumed to be 6061 aluminum.')
   }
 
-  const holeCountMatch = normalized.match(/(\d+)\s+(?:mounting\s+)?holes?/)
+  const holeCountMatch =
+    normalized.match(/(\d+)\s+(?:mounting\s+)?holes?/) ??
+    normalized.match(/holes?\s*[:=]?\s*(\d+)/)
   const holeDiameterMatch =
     normalized.match(/holes?[^,.]{0,30}?(\d+(?:\.\d+)?)\s*mm\s*(?:diameter|dia)/) ??
     normalized.match(/(\d+(?:\.\d+)?)\s*mm\s*(?:diameter|dia)[^,.]{0,20}?holes?/)
   const edgeOffsetMatch = normalized.match(
     /(\d+(?:\.\d+)?)\s*mm\s+from\s+(?:each\s+)?(?:corner|edge)/,
   )
-  const centerCutoutMatch = normalized.match(
-    /(\d+(?:\.\d+)?)\s*mm\s+(?:diameter\s+)?(?:center|central)\s+(?:hole|cutout)/,
-  )
-  const rectangularCutoutMatch = normalized.match(
-    /(\d+(?:\.\d+)?)\s*mm\s*x\s*(\d+(?:\.\d+)?)\s*mm\s+rectangular(?:\s+center)?\s+cutout/,
-  )
+  const centerCutoutMatch =
+    normalized.match(
+      /(\d+(?:\.\d+)?)\s*mm\s+(?:diameter\s+)?(?:center|central)\s+(?:hole|cutout)/,
+    ) ??
+    normalized.match(
+      /(?:center|central)\s+(?:hole|cutout)[^,.]{0,18}?(\d+(?:\.\d+)?)\s*mm/,
+    )
+  const rectangularCutoutMatch =
+    normalized.match(
+      /(\d+(?:\.\d+)?)\s*(?:mm)?\s*x\s*(\d+(?:\.\d+)?)\s*mm\s+rectangular(?:\s+center)?\s+cutout/,
+    ) ??
+    normalized.match(
+      /rectangular(?:\s+center)?\s+cutout[^,.]{0,18}?(\d+(?:\.\d+)?)\s*(?:mm)?\s*x\s*(\d+(?:\.\d+)?)\s*mm/,
+    )
   const flangeMatch = normalized.match(/flange\s+(\d+(?:\.\d+)?)\s*mm(?:\s+high)?/)
 
   const kind = /l[\s-]?bracket|flange|bent bracket/.test(normalized)
@@ -107,7 +147,10 @@ export function parseSpecification(spec: string): {
       ? 'panel'
       : 'plate'
 
-  const holeCount = Math.round(numberFrom(holeCountMatch?.[1], defaults.holeCount))
+  const explicitlyNoHoles = /\b(?:no holes?|without holes?|solid plate)\b/.test(normalized)
+  const holeCount = explicitlyNoHoles
+    ? 0
+    : Math.round(numberFrom(holeCountMatch?.[1], defaults.holeCount))
   const holeDiameter = numberFrom(holeDiameterMatch?.[1], defaults.holeDiameter)
   const maxOffset = Math.max(2, Math.min(width, height) / 2 - holeDiameter)
   const edgeOffset = clamp(numberFrom(edgeOffsetMatch?.[1], defaults.edgeOffset), 2, maxOffset)
@@ -115,9 +158,15 @@ export function parseSpecification(spec: string): {
     ? 0
     : numberFrom(centerCutoutMatch?.[1], defaults.centerCutoutDiameter)
 
-  if (!holeCountMatch) assumptions.push('Four mounting holes added for a stable fixture pattern.')
-  if (!holeDiameterMatch) assumptions.push('Mounting-hole diameter assumed to be 3 mm.')
-  if (!edgeOffsetMatch) assumptions.push('Hole centers offset 5 mm from the nearest edge.')
+  if (!holeCountMatch && !explicitlyNoHoles) {
+    assumptions.push('Four mounting holes added for a stable fixture pattern.')
+  }
+  if (!holeDiameterMatch && !explicitlyNoHoles) {
+    assumptions.push('Mounting-hole diameter assumed to be 3 mm.')
+  }
+  if (!edgeOffsetMatch && !explicitlyNoHoles) {
+    assumptions.push('Hole centers offset 5 mm from the nearest edge.')
+  }
 
   const params: PartParameters = {
     kind,
@@ -146,7 +195,7 @@ export function parseSpecification(spec: string): {
     material,
   }
 
-  return { params, assumptions }
+  return { params, assumptions, usedDefaultEnvelope }
 }
 
 function getHolePositions(params: PartParameters): Array<[number, number]> {
